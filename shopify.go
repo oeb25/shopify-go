@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -19,6 +20,26 @@ func (s *Shopify) BuildUrl() string {
 
 func (s *Shopify) Get(url string) (*http.Response, error) {
 	return http.Get(s.BuildUrl() + "/admin/products.json")
+}
+
+func (s *Shopify) GetInto(url string, v interface{}) error {
+	resp, err := s.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	err = json.Unmarshal(body, v)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 type Image struct {
@@ -50,18 +71,23 @@ type Product struct {
 	Vendor         string    `json:"vendor"`
 }
 
-func (s *Shopify) GetProducts() ([]Product, error) {
-	resp, err := s.Get("/admin/products.json")
+func (p *Product) GetMetafields(shop *Shopify) (map[string]interface{}, error) {
+	metafields := make(map[string]interface{})
+
+	err := shop.GetInto("/admin/products/"+strconv.Itoa(p.ID)+"/metafields.json", &metafields)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
 
-	body, _ := ioutil.ReadAll(resp.Body)
+	return metafields, nil
+}
 
+func (s *Shopify) GetProducts() ([]Product, error) {
 	var dd map[string][]Product
-
-	_ = json.Unmarshal(body, &dd)
+	err := s.GetInto("/admin/products.json", &dd)
+	if err != nil {
+		return nil, err
+	}
 
 	return dd["products"], nil
 }
